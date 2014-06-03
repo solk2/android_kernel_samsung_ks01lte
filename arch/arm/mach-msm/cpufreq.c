@@ -53,6 +53,7 @@ static unsigned int *l2_khz;
 static bool is_clk;
 static bool is_sync;
 static unsigned long *mem_bw;
+static bool hotplug_ready;
 
 struct cpufreq_work_struct {
 	struct work_struct work;
@@ -239,12 +240,15 @@ static int msm_cpufreq_verify(struct cpufreq_policy *policy)
 	return 0;
 }
 
-static unsigned int msm_cpufreq_get_freq(unsigned int cpu)
+unsigned int msm_cpufreq_get_freq(unsigned int cpu)
 {
+	if (is_clk && is_sync)
+		cpu = 0;
+
 	if (is_clk)
 		return clk_get_rate(cpu_clk[cpu]) / 1000;
 
-	return acpuclk_get_rate(cpu);
+	return 0;
 }
 
 static int __cpuinit msm_cpufreq_init(struct cpufreq_policy *policy)
@@ -252,12 +256,9 @@ static int __cpuinit msm_cpufreq_init(struct cpufreq_policy *policy)
 	int cur_freq;
 	int index;
 	int ret = 0;
-	struct cpufreq_frequency_table *table;
+	struct cpufreq_frequency_table *table = freq_table;
 	struct cpufreq_work_struct *cpu_work = NULL;
 
-	table = cpufreq_frequency_get_table(policy->cpu);
-	if (table == NULL)
-		return -ENODEV;
 	/*
 	 * In 8625, 8610, and 8226 both cpu core's frequency can not
 	 * be changed independently. Each cpu is bound to
@@ -278,6 +279,7 @@ static int __cpuinit msm_cpufreq_init(struct cpufreq_policy *policy)
 	if (cpufreq_frequency_table_cpuinfo(policy, table)) {
 #ifdef CONFIG_MSM_CPU_FREQ_SET_MIN_MAX
 		policy->cpuinfo.min_freq = CONFIG_MSM_CPU_FREQ_MIN;
+		exposed_policy_min = CONFIG_MSM_CPU_FREQ_MIN;
 		policy->cpuinfo.max_freq = CONFIG_MSM_CPU_FREQ_MAX;
 #endif
 	}
@@ -285,11 +287,9 @@ static int __cpuinit msm_cpufreq_init(struct cpufreq_policy *policy)
 	policy->min = CONFIG_MSM_CPU_FREQ_MIN;
 	policy->max = CONFIG_MSM_CPU_FREQ_MAX;
 #endif
+        policy->max = 2265600;
 
-	if (is_clk)
-		cur_freq = clk_get_rate(cpu_clk[policy->cpu])/1000;
-	else
-		cur_freq = acpuclk_get_rate(policy->cpu);
+	cur_freq = clk_get_rate(cpu_clk[policy->cpu])/1000;
 
 	if (cpufreq_frequency_table_target(policy, table, cur_freq,
 	    CPUFREQ_RELATION_H, &index) &&
@@ -308,10 +308,11 @@ static int __cpuinit msm_cpufreq_init(struct cpufreq_policy *policy)
 		return ret;
 	pr_debug("cpufreq: cpu%d init at %d switching to %d\n",
 			policy->cpu, cur_freq, table[index].frequency);
-	policy->cur = table[index].frequency;
+	policy->cur = policy->max;
 
 	policy->cpuinfo.transition_latency =
 		acpuclk_get_switch_time() * NSEC_PER_USEC;
+	cpufreq_frequency_table_get_attr(table, policy->cpu);
 
 	return 0;
 }
@@ -321,6 +322,10 @@ static int __cpuinit msm_cpufreq_cpu_callback(struct notifier_block *nfb,
 {
 	unsigned int cpu = (unsigned long)hcpu;
 	int rc;
+
+	/* Fail hotplug until this driver can get CPU clocks */
+	if (!hotplug_ready)
+		return NOTIFY_BAD;
 
 	switch (action & ~CPU_TASKS_FROZEN) {
 	case CPU_ONLINE:
@@ -585,14 +590,11 @@ static int __init msm_cpufreq_probe(struct platform_device *pdev)
 
 	if (!cpu_clk[0])
 		return -ENODEV;
+	hotplug_ready = true;
 
 	ret = cpufreq_parse_dt(dev);
 	if (ret)
 		return ret;
-
-	for_each_possible_cpu(cpu) {
-		cpufreq_frequency_table_get_attr(freq_table, cpu);
-	}
 
 	ret = register_devfreq_msm_cpufreq();
 	if (ret) {
@@ -626,17 +628,32 @@ static struct platform_driver msm_cpufreq_plat_driver = {
 
 static int __init msm_cpufreq_register(void)
 {
-	int cpu;
+	int cpu, rc;
 
 	for_each_possible_cpu(cpu) {
 		mutex_init(&(per_cpu(cpufreq_suspend, cpu).suspend_mutex));
 		per_cpu(cpufreq_suspend, cpu).device_suspended = 0;
 	}
 
-	platform_driver_probe(&msm_cpufreq_plat_driver, msm_cpufreq_probe);
+	rc = platform_driver_probe(&msm_cpufreq_plat_driver,
+				   msm_cpufreq_probe);
+	if (rc < 0) {
+		/* Unblock hotplug if msm-cpufreq probe fails */
+		unregister_hotcpu_notifier(&msm_cpufreq_cpu_notifier);
+		for_each_possible_cpu(cpu)
+			mutex_destroy(&(per_cpu(cpufreq_suspend, cpu).
+					suspend_mutex));
+		return rc;
+	}
+
 	msm_cpufreq_wq = alloc_workqueue("msm-cpufreq", WQ_HIGHPRI, 0);
-	register_hotcpu_notifier(&msm_cpufreq_cpu_notifier);
 	return cpufreq_register_driver(&msm_cpufreq_driver);
 }
 
 device_initcall(msm_cpufreq_register);
+
+static int __init msm_cpufreq_early_register(void)
+{
+	return register_hotcpu_notifier(&msm_cpufreq_cpu_notifier);
+}
+core_initcall(msm_cpufreq_early_register);

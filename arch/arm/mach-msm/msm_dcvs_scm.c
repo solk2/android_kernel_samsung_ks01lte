@@ -16,9 +16,9 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
-#include <linux/dma-mapping.h>
 #include <asm/cacheflush.h>
 #include <mach/memory.h>
+#include <linux/dma-mapping.h>
 #include <mach/scm.h>
 #include <mach/msm_dcvs_scm.h>
 #include <trace/events/mpdcvs_trace.h>
@@ -61,37 +61,35 @@ struct msm_algo_param {
 
 int msm_dcvs_scm_init(size_t size)
 {
-	int ret = 0;
-	struct scm_init init;
-	struct device dev = { 0 };
-	dma_addr_t handle;
+        int ret = 0;
+        struct scm_init init;
 	void *cpu_addr;
-	int psize[2] = {0, 0};
+	struct device dev = { 0 };
+	dma_addr_t paddr;
 	DEFINE_DMA_ATTRS(attrs);
 
+	dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &attrs);
+	dev.coherent_dma_mask = DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
+	cpu_addr = dma_alloc_attrs(&dev, size, &paddr, GFP_KERNEL, &attrs);
 
-        dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &attrs);
-        dev.coherent_dma_mask = DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
-        cpu_addr = dma_alloc_attrs(&dev, size, &handle, GFP_KERNEL, &attrs);
         if (!cpu_addr) {
-                pr_err("%s: Failed to allocate %d bytes for PTBL\n",
-                        __func__, psize[0]);
-                ret = -ENOMEM;
-                return ret;
+		pr_err("%s: Failed to allocate %d bytes for cmd buf\n",__func__, size);
+                return -ENOMEM;
+	}
+
+        init.phy = (unsigned int)paddr;;
+        init.size = size;
+
+        ret = scm_call(SCM_SVC_DCVS, DCVS_CMD_INIT,
+                        &init, sizeof(init), NULL, 0);
+
+        /* Not freed if the initialization succeeds */
+        if (ret) {
+		pr_err("%s: scm_call DCVS_CMD_INIT failed\n",__func__);
+		dma_free_coherent(&dev, size, cpu_addr, paddr);
         }
 
-	init.phy = (unsigned int)handle;
-	init.size = size;
-
-	ret = scm_call(SCM_SVC_DCVS, DCVS_CMD_INIT,
-			&init, sizeof(init), NULL, 0);
-
-	/* Not freed if the initialization succeeds */
-	if (ret)
-		dma_free_coherent(&dev,size,cpu_addr,handle);
-//		free_contiguous_memory_by_paddr(p);
-
-	return ret;
+        return ret;
 }
 EXPORT_SYMBOL(msm_dcvs_scm_init);
 

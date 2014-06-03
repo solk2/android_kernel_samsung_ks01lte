@@ -572,10 +572,8 @@ static bool __ref msm_pm_spm_power_collapse(
 	}
 	msm_jtag_restore_state();
 
-	if (collapsed) {
-		cpu_init();
+	if (collapsed)
 		local_fiq_enable();
-	}
 
 	msm_pm_boot_config_after_pc(cpu);
 
@@ -818,7 +816,7 @@ int msm_cpu_pm_enter_sleep(enum msm_pm_sleep_mode mode, bool from_idle)
 
 int msm_pm_wait_cpu_shutdown(unsigned int cpu)
 {
-	int timeout = 10;
+	int timeout = 0;
 
 	if (!msm_pm_slp_sts)
 		return 0;
