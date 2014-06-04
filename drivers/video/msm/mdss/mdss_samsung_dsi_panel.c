@@ -25,6 +25,9 @@
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
+#ifdef CONFIG_POWERSUSPEND
+#include <linux/powersuspend.h>
+#endif
 #include "mdss_dsi.h"
 #include "mdss_samsung_dsi_panel.h"
 #include "mdss_fb.h"
@@ -66,6 +69,10 @@
 
 
 #define DT_CMD_HDR 6
+
+unsigned int Lpanel_colors = 2;
+extern void panel_load_colors(unsigned int val);
+extern bool cpufreq_screen_on;
 
 static struct dsi_buf dsi_panel_tx_buf;
 static struct dsi_buf dsi_panel_rx_buf;
@@ -463,7 +470,7 @@ static ssize_t mipi_samsung_disp_get_power(struct device *dev,
 	if (unlikely(mfd->key != MFD_KEY))
 		return -EINVAL;
 
-	rc = snprintf((char *)buf, sizeof(*buf), "%d\n", mfd->panel_power_on);
+	rc = snprintf((char *)buf, sizeof(buf), "%d\n", mfd->panel_power_on);
 	pr_info("mipi_samsung_disp_get_power(%d)\n", mfd->panel_power_on);
 
 	return rc;
@@ -543,7 +550,7 @@ static ssize_t mipi_samsung_disp_acl_show(struct device *dev,
 {
 	int rc;
 
-	rc = snprintf((char *)buf, sizeof(*buf), "%d\n", msd.dstat.acl_on);
+	rc = snprintf((char *)buf, sizeof(buf), "%d\n", msd.dstat.acl_on);
 	pr_info("acl status: %d\n", *buf);
 
 	return rc;
@@ -851,10 +858,8 @@ static struct dsi_cmd get_gamma_control_set(int candella)
 {
 	struct dsi_cmd gamma_control = {0,};
 	/* Just a safety check to ensure smart dimming data is initialised well */
-	if (msd.dstat.is_smart_dim_loaded) {
-		BUG_ON(msd.sdimconf->generate_gamma == NULL);
-		msd.sdimconf->generate_gamma(candella, &gamma_cmds_list.cmd_desc[0].payload[1]);
-	}
+	BUG_ON(msd.sdimconf->generate_gamma == NULL);
+	msd.sdimconf->generate_gamma(candella, &gamma_cmds_list.cmd_desc[0].payload[1]);
 
 	gamma_control.cmd_desc = &(gamma_cmds_list.cmd_desc[0]);
 	gamma_control.num_of_cmds = gamma_cmds_list.num_of_cmds;
@@ -1171,7 +1176,7 @@ static ssize_t mipi_samsung_disp_siop_show(struct device *dev,
 {
 	int rc;
 
-	rc = snprintf((char *)buf, sizeof(*buf), "%d\n", msd.dstat.siop_status);
+	rc = snprintf((char *)buf, sizeof(buf), "%d\n", msd.dstat.siop_status);
 	pr_info("siop status: %d\n", *buf);
 
 	return rc;
@@ -1301,7 +1306,7 @@ static ssize_t mipi_samsung_backlight_show(struct device *dev,
 {
 	int rc;
 
-	rc = snprintf((char *)buf, sizeof(*buf), "%d\n",
+	rc = snprintf((char *)buf, sizeof(buf), "%d\n",
 					msd.dstat.bright_level );
 	pr_info("backlight : %d\n", *buf);
 
@@ -1326,7 +1331,7 @@ static ssize_t mipi_samsung_auto_brightness_show(struct device *dev,
 {
 	int rc;
 
-	rc = snprintf((char *)buf, sizeof(*buf), "%d\n",
+	rc = snprintf((char *)buf, sizeof(buf), "%d\n",
 					msd.dstat.auto_brightness);
 	pr_info("auto_brightness: %d\n", *buf);
 
@@ -1578,6 +1583,35 @@ static DEVICE_ATTR(force_500cd, S_IRUGO | S_IWUSR | S_IWGRP,
 #endif
 
 #endif
+
+static ssize_t panel_colors_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", Lpanel_colors);
+}
+
+static ssize_t panel_colors_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret;
+	unsigned int value;
+
+	ret = sscanf(buf, "%d\n", &value);
+	if (ret != 1)
+		return -EINVAL;
+
+	if (value < 0)
+		value = 0;
+	else if (value > 4)
+		value = 4;
+
+	Lpanel_colors = value;
+
+	panel_load_colors(Lpanel_colors);
+
+	return size;
+}
+
+static DEVICE_ATTR(panel_colors, S_IRUGO | S_IWUSR | S_IWGRP,
+			panel_colors_show, panel_colors_store);
 
 #if !defined(CONFIG_FB_MSM_EDP_SAMSUNG)
 static int __init current_boot_mode(char *mode)
@@ -2335,6 +2369,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
 	}
+	cpufreq_screen_on = true;
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 			panel_data);
 
@@ -2437,6 +2472,10 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	msd.dstat.on = 1;
 #endif
 
+#ifdef CONFIG_POWERSUSPEND
+	set_power_suspend_state_panel_hook(POWER_SUSPEND_INACTIVE);
+#endif
+
 	return 0;
 }
 
@@ -2469,9 +2508,14 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 	mipi_samsung_disp_send_cmd(PANEL_DISP_OFF, true);
 
 	pr_info("mdss_dsi_panel_off --\n");
+	cpufreq_screen_on = false;
 
 #if defined(CONFIG_DUAL_LCD)
 	msd.lcd_panel_cmds = 0;
+#endif
+
+#ifdef CONFIG_POWERSUSPEND
+	set_power_suspend_state_panel_hook(POWER_SUSPEND_ACTIVE);
 #endif
 
 	return 0;
@@ -3469,8 +3513,10 @@ static int samsung_dsi_panel_event_handler(int event)
 			is_negative_on();
 			break;
 #endif
+		case MDSS_EVENT_RESET:
+			break;
 		default:
-			pr_err("%s : unknown event \n", __func__);
+			pr_debug("%s : unknown event \n", __func__);
 			break;
 
 	}
@@ -3502,6 +3548,7 @@ static struct attribute *panel_sysfs_attributes[] = {
 #endif
 #if defined(PARTIAL_UPDATE)
 	&dev_attr_partial_disp.attr,
+	&dev_attr_panel_colors.attr,
 #endif
 #if defined(FORCE_500CD)
 	&dev_attr_force_500cd.attr,

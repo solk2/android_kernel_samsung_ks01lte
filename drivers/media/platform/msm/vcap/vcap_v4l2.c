@@ -18,6 +18,7 @@
 #include <linux/mutex.h>
 #include <linux/videodev2.h>
 #include <linux/platform_device.h>
+#include <linux/memory_alloc.h>
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
 #include <linux/regulator/consumer.h>

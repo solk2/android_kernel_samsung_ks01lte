@@ -95,6 +95,8 @@ void mdss_dsi_ctrl_init(struct mdss_dsi_ctrl_pdata *ctrl)
 		ctrl->ndx = DSI_CTRL_1;
 	}
 
+	ctrl->panel_mode = ctrl->panel_data.panel_info.mipi.mode;
+
 	ctrl_list[ctrl->ndx] = ctrl;	/* keep it */
 
 	if (mdss_register_irq(ctrl->dsi_hw))
@@ -265,8 +267,6 @@ void mdss_dsi_host_init(struct mipi_panel_info *pinfo,
 	dsi_ctrl_base = ctrl_pdata->ctrl_base;
 
 	pinfo->rgb_swap = DSI_RGB_SWAP_RGB;
-
-	ctrl_pdata->panel_mode = pinfo->mode;
 
 	if (pinfo->mode == DSI_VIDEO_MODE) {
 		data = 0;
@@ -1525,7 +1525,7 @@ static int dsi_event_thread(void *data)
 	spin_lock_init(&ev->event_lock);
 
 	while (1) {
-		wait_event(ev->event_q, (ev->event_pndx != ev->event_gndx));
+		wait_event_interruptible(ev->event_q, (ev->event_pndx != ev->event_gndx));
 		spin_lock_irqsave(&ev->event_lock, flag);
 		evq = &ev->todo_list[ev->event_gndx++];
 		todo = evq->todo;

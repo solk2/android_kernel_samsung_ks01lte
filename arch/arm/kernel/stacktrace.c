@@ -6,6 +6,9 @@
 
 #if defined(CONFIG_FRAME_POINTER) && !defined(CONFIG_ARM_UNWIND)
 /*
+ * If both CONFIG_FRAME_POINTER=y and CONFIG_ARM_UNWIND=y walk_stackframe uses
+ * unwind information. So for now just depend on !CONFIG_ARM_UNWIND.
+ *
  * Unwind the current stack frame and store the new register values in the
  * structure passed as argument. Unwinding is equivalent to a function return,
  * hence the new PC value rather than LR should be used for backtrace.
@@ -31,7 +34,7 @@ int notrace unwind_frame(struct stackframe *frame)
 	high = ALIGN(low, THREAD_SIZE);
 
 	/* check current frame pointer is within bounds */
-	if (fp < (low + 12) || fp + 4 >= high)
+	if (fp < low + 12 || fp > high - 4)
 		return -EINVAL;
 
 	/* restore the registers from the stack frame */

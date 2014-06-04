@@ -515,7 +515,7 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id)
 		goto fail_id;
 
 	if (blk_throtl_init(q))
-		goto fail_id;
+		goto fail_bdi;
 
 	setup_timer(&q->backing_dev_info.laptop_mode_wb_timer,
 		    laptop_mode_timer_fn, (unsigned long) q);
@@ -540,6 +540,8 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id)
 
 	return q;
 
+fail_bdi:
+	bdi_destroy(&q->backing_dev_info);
 fail_id:
 	ida_simple_remove(&blk_queue_ida, q->id);
 fail_q:
@@ -617,7 +619,7 @@ blk_init_allocated_queue(struct request_queue *q, request_fn_proc *rfn,
 	q->request_fn		= rfn;
 	q->prep_rq_fn		= NULL;
 	q->unprep_rq_fn		= NULL;
-	q->queue_flags		= QUEUE_FLAG_DEFAULT;
+	q->queue_flags		|= QUEUE_FLAG_DEFAULT;
 
 	/* Override internal queue lock with supplied lock pointer */
 	if (lock)
@@ -1221,8 +1223,9 @@ void __blk_put_request(struct request_queue *q, struct request *req)
 
 	elv_completed_request(q, req);
 
-	/* this is a bio leak */
-	WARN_ON(req->bio != NULL);
+	/* this is a bio leak if the bio is not tagged with BIO_DONTFREE */
+	WARN_ON(req->bio && !bio_flagged(req->bio, BIO_DONTFREE));
+
 
 	/*
 	 * Request may not have originated from ll_rw_blk. if not,
@@ -2059,10 +2062,8 @@ struct request *blk_peek_request(struct request_queue *q)
 			 * not be passed by new incoming requests
 			 */
 			rq->cmd_flags |= REQ_STARTED;
-			if (rq->cmd_flags & REQ_URGENT) {
-				WARN_ON(q->dispatched_urgent);
+			if (rq->cmd_flags & REQ_URGENT)
 				q->dispatched_urgent = true;
-			}
 			trace_block_rq_issue(q, rq);
 		}
 
@@ -2172,6 +2173,7 @@ void blk_start_request(struct request *req)
 	if (unlikely(blk_bidi_rq(req)))
 		req->next_rq->resid_len = blk_rq_bytes(req->next_rq);
 
+	BUG_ON(test_bit(REQ_ATOM_COMPLETE, &req->atomic_flags));
 	blk_add_timer(req);
 }
 EXPORT_SYMBOL(blk_start_request);
@@ -2232,7 +2234,7 @@ bool blk_update_request(struct request *req, int error, unsigned int nr_bytes)
 	if (!req->bio)
 		return false;
 
-	trace_block_rq_complete(req->q, req);
+	trace_block_rq_complete(req->q, req, nr_bytes);
 
 	/*
 	 * For fs requests, rq is just carrier of independent bio's
@@ -2274,6 +2276,15 @@ bool blk_update_request(struct request *req, int error, unsigned int nr_bytes)
 	blk_account_io_completion(req, nr_bytes);
 
 	total_bytes = bio_nbytes = 0;
+
+	/*
+	 * Check for this if flagged, Req based dm needs to perform
+	 * post processing, hence dont end bios or request.DM
+	 * layer takes care.
+	 */
+	if (bio_flagged(req->bio, BIO_DONTFREE))
+		return false;
+
 	while ((bio = req->bio) != NULL) {
 		int nbytes;
 
@@ -3170,7 +3181,8 @@ int __init blk_dev_init(void)
 
 	/* used for unplugging and affects IO latency/throughput - HIGHPRI */
 	kblockd_workqueue = alloc_workqueue("kblockd",
-					    WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
+					    WQ_MEM_RECLAIM | WQ_HIGHPRI |
+					    WQ_POWER_EFFICIENT, 0);
 	if (!kblockd_workqueue)
 		panic("Failed to create kblockd\n");
 

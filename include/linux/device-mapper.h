@@ -72,8 +72,8 @@ typedef void (*dm_postsuspend_fn) (struct dm_target *ti);
 typedef int (*dm_preresume_fn) (struct dm_target *ti);
 typedef void (*dm_resume_fn) (struct dm_target *ti);
 
-typedef int (*dm_status_fn) (struct dm_target *ti, status_type_t status_type,
-			     char *result, unsigned int maxlen);
+typedef void (*dm_status_fn) (struct dm_target *ti, status_type_t status_type,
+			      char *result, unsigned int maxlen);
 
 typedef int (*dm_message_fn) (struct dm_target *ti, unsigned argc, char **argv);
 
@@ -510,5 +510,6 @@ void dm_dispatch_request(struct request *rq);
 void dm_requeue_unmapped_request(struct request *rq);
 void dm_kill_unmapped_request(struct request *rq, int error);
 int dm_underlying_device_busy(struct request_queue *q);
+void dm_end_request(struct request *clone, int error);
 
 #endif	/* _LINUX_DEVICE_MAPPER_H */

@@ -1756,8 +1756,9 @@ int regulator_disable_deferred(struct regulator *regulator, int ms)
 	rdev->deferred_disables++;
 	mutex_unlock(&rdev->mutex);
 
-	ret = schedule_delayed_work(&rdev->disable_work,
-				    msecs_to_jiffies(ms));
+	ret = queue_delayed_work(system_power_efficient_wq,
+				 &rdev->disable_work,
+				 msecs_to_jiffies(ms));
 	if (ret < 0)
 		return ret;
 	else
@@ -1989,8 +1990,8 @@ static int _regulator_do_set_voltage(struct regulator_dev *rdev,
 int regulator_set_voltage(struct regulator *regulator, int min_uV, int max_uV)
 {
 	struct regulator_dev *rdev = regulator->rdev;
-	int prev_min_uV, prev_max_uV;
 	int ret = 0;
+	int old_min_uV, old_max_uV;
 
 	mutex_lock(&rdev->mutex);
 
@@ -2013,22 +2014,26 @@ int regulator_set_voltage(struct regulator *regulator, int min_uV, int max_uV)
 	if (ret < 0)
 		goto out;
 
-	prev_min_uV = regulator->min_uV;
-	prev_max_uV = regulator->max_uV;
-
+	/* restore original values in case of error */
+	old_min_uV = regulator->min_uV;
+	old_max_uV = regulator->max_uV;
 	regulator->min_uV = min_uV;
 	regulator->max_uV = max_uV;
 
 	ret = regulator_check_consumers(rdev, &min_uV, &max_uV);
-	if (ret < 0) {
-		regulator->min_uV = prev_min_uV;
-		regulator->max_uV = prev_max_uV;
-		goto out;
-	}
+	if (ret < 0)
+		goto out2;
 
 	ret = _regulator_do_set_voltage(rdev, min_uV, max_uV);
+	if (ret < 0)
+		goto out2;
 
 out:
+	mutex_unlock(&rdev->mutex);
+	return ret;
+out2:
+	regulator->min_uV = old_min_uV;
+	regulator->max_uV = old_max_uV;
 	mutex_unlock(&rdev->mutex);
 	return ret;
 }
@@ -3459,6 +3464,8 @@ unset_supplies:
 	unset_regulator_supplies(rdev);
 
 scrub:
+	if (rdev->supply)
+		regulator_put(rdev->supply);
 	kfree(rdev->constraints);
 	device_unregister(&rdev->dev);
 	/* device core frees rdev */

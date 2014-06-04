@@ -916,9 +916,11 @@ static inline loff_t i_size_read(const struct inode *inode)
 static inline void i_size_write(struct inode *inode, loff_t i_size)
 {
 #if BITS_PER_LONG==32 && defined(CONFIG_SMP)
+	preempt_disable();
 	write_seqcount_begin(&inode->i_size_seqcount);
 	inode->i_size = i_size;
 	write_seqcount_end(&inode->i_size_seqcount);
+	preempt_enable();
 #elif BITS_PER_LONG==32 && defined(CONFIG_PREEMPT)
 	preempt_disable();
 	inode->i_size = i_size;
@@ -1508,6 +1510,10 @@ struct super_block {
 
 	/* Being remounted read-only */
 	int s_readonly_remount;
+#ifdef CONFIG_ASYNC_FSYNC
+#define FLAG_ASYNC_FSYNC        0x1
+	unsigned int fsync_flags;
+#endif
 };
 
 /* superblock cache pruning functions */
@@ -2062,6 +2068,7 @@ extern struct super_block *freeze_bdev(struct block_device *);
 extern void emergency_thaw_all(void);
 extern int thaw_bdev(struct block_device *bdev, struct super_block *sb);
 extern int fsync_bdev(struct block_device *);
+extern int sb_is_blkdev_sb(struct super_block *sb);
 #else
 static inline void bd_forget(struct inode *inode) {}
 static inline int sync_blockdev(struct block_device *bdev) { return 0; }
@@ -2074,6 +2081,15 @@ static inline struct super_block *freeze_bdev(struct block_device *sb)
 }
 
 static inline int thaw_bdev(struct block_device *bdev, struct super_block *sb)
+{
+	return 0;
+}
+
+static inline void iterate_bdevs(void (*f)(struct block_device *, void *), void *arg)
+{
+}
+
+static inline int sb_is_blkdev_sb(struct super_block *sb)
 {
 	return 0;
 }

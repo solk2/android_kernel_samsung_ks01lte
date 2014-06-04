@@ -75,7 +75,6 @@ enum msm_camera_i2c_data_type {
 	MSM_CAMERA_I2C_UNSET_WORD_MASK,
 	MSM_CAMERA_I2C_SET_BYTE_WRITE_MASK_DATA,
 	MSM_CAMERA_I2C_DATA_TYPE_MAX,
-	MSM_CAMERA_I2C_BURST_DATA,
 };
 
 enum msm_sensor_power_seq_type_t {
@@ -482,13 +481,12 @@ enum msm_actuator_cfg_type_t {
 	CFG_SET_DEFAULT_FOCUS,
 	CFG_SET_POSITION,
 	CFG_MOVE_FOCUS,
+	CFG_SET_POSITION,
 };
 
 enum actuator_type {
 	ACTUATOR_VCM,
 	ACTUATOR_PIEZO,
-	ACTUATOR_HALL_EFFECT,
-	ACTUATOR_HVCM,
 };
 
 enum msm_actuator_data_type {

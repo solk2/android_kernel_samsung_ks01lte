@@ -20,6 +20,9 @@
 
 #define HANDLE_TO_IDX(handle) (handle & 0xFF)
 
+#define MSM_ISP_MIN_AB 450000000
+#define MSM_ISP_MIN_IB 900000000
+
 int msm_isp_axi_create_stream(
 	struct msm_vfe_axi_shared_data *axi_data,
 	struct msm_vfe_axi_stream_request_cmd *stream_cfg_cmd)
@@ -369,6 +372,42 @@ int msm_isp_axi_check_stream_state(
 		}
 	}
 	return rc;
+}
+
+void msm_isp_update_framedrop_rdi_reg(struct vfe_device *vfe_dev, int flag)
+{
+	int i;
+	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
+	struct msm_vfe_axi_stream *stream_info;
+	int stream_src;
+
+	for (i = 0; i < MAX_NUM_STREAM; i++) {
+		stream_info = &axi_data->stream_info[i];
+		if (stream_info->state != ACTIVE)
+			continue;
+
+		stream_src = stream_info->stream_src - VFE_SRC_MAX + 1;
+		if (!((1 << stream_src) & flag))
+			continue;
+
+		if (stream_info->runtime_framedrop_update) {
+			stream_info->runtime_init_frame_drop--;
+			if (stream_info->runtime_init_frame_drop == 0) {
+				stream_info->runtime_framedrop_update = 0;
+				vfe_dev->hw_info->vfe_ops.axi_ops.
+				cfg_framedrop(vfe_dev, stream_info);
+			}
+		}
+		if (stream_info->stream_type == BURST_STREAM) {
+			stream_info->runtime_burst_frame_count--;
+			if (stream_info->runtime_burst_frame_count == 0) {
+				vfe_dev->hw_info->vfe_ops.axi_ops.
+				cfg_framedrop(vfe_dev, stream_info);
+				vfe_dev->hw_info->vfe_ops.core_ops.
+				 reg_update(vfe_dev);
+			}
+		}
+	}
 }
 
 void msm_isp_update_framedrop_reg(struct vfe_device *vfe_dev)
@@ -1061,6 +1100,8 @@ static int msm_isp_update_stream_bandwidth(struct vfe_device *vfe_dev)
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	uint32_t total_pix_bandwidth = 0, total_rdi_bandwidth = 0;
 	uint32_t num_pix_streams = 0;
+	uint32_t num_rdi_streams = 0;
+	uint32_t total_streams   = 0;
 	uint64_t total_bandwidth = 0;
 
 	for (i = 0; i < MAX_NUM_STREAM; i++) {
@@ -1072,6 +1113,7 @@ static int msm_isp_update_stream_bandwidth(struct vfe_device *vfe_dev)
 				num_pix_streams++;
 			} else {
 				total_rdi_bandwidth += stream_info->bandwidth;
+				num_rdi_streams++;
 			}
 		}
 	}
@@ -1081,10 +1123,17 @@ static int msm_isp_update_stream_bandwidth(struct vfe_device *vfe_dev)
 			axi_data->src_info[VFE_PIX_0].pixel_clock *
 			ISP_DEFAULT_FORMAT_FACTOR / ISP_Q2;
 	total_bandwidth = total_pix_bandwidth + total_rdi_bandwidth;
-
+	total_streams = num_pix_streams + num_rdi_streams;
+	if (total_streams == 1) {
+         rc = msm_isp_update_bandwidth(ISP_VFE0 + vfe_dev->pdev->id,
+		(total_bandwidth - MSM_ISP_MIN_AB) , (total_bandwidth *
+		ISP_BUS_UTILIZATION_FACTOR / ISP_Q2 - MSM_ISP_MIN_IB));
+	}
+	else {
 	rc = msm_isp_update_bandwidth(ISP_VFE0 + vfe_dev->pdev->id,
 		total_bandwidth, total_bandwidth *
 		ISP_BUS_UTILIZATION_FACTOR / ISP_Q2);
+	}
 	if (rc < 0)
 		pr_err("%s: update failed\n", __func__);
 

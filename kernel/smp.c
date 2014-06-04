@@ -33,6 +33,7 @@ struct call_function_data {
 	struct call_single_data	csd;
 	atomic_t		refs;
 	cpumask_var_t		cpumask;
+	cpumask_var_t		cpumask_ipi;
 };
 
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct call_function_data, cfd_data);
@@ -41,6 +42,10 @@ struct call_single_queue {
 	struct list_head	list;
 	raw_spinlock_t		lock;
 };
+
+/* CPU mask indicating which CPUs to bring online during smp_init() */
+static bool have_boot_cpu_mask;
+static cpumask_var_t boot_cpu_mask;
 
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct call_single_queue, call_single_queue);
 
@@ -56,6 +61,9 @@ hotplug_cfd(struct notifier_block *nfb, unsigned long action, void *hcpu)
 		if (!zalloc_cpumask_var_node(&cfd->cpumask, GFP_KERNEL,
 				cpu_to_node(cpu)))
 			return notifier_from_errno(-ENOMEM);
+		if (!zalloc_cpumask_var_node(&cfd->cpumask_ipi, GFP_KERNEL,
+				cpu_to_node(cpu)))
+			return notifier_from_errno(-ENOMEM);
 		break;
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -65,6 +73,7 @@ hotplug_cfd(struct notifier_block *nfb, unsigned long action, void *hcpu)
 	case CPU_DEAD:
 	case CPU_DEAD_FROZEN:
 		free_cpumask_var(cfd->cpumask);
+		free_cpumask_var(cfd->cpumask_ipi);
 		break;
 #endif
 	};
@@ -527,6 +536,12 @@ void smp_call_function_many(const struct cpumask *mask,
 		return;
 	}
 
+	/*
+	 * After we put an entry into the list, data->cpumask
+	 * may be cleared again when another CPU sends another IPI for
+	 * a SMP function call, so data->cpumask will be zero.
+	 */
+	cpumask_copy(data->cpumask_ipi, data->cpumask);
 	raw_spin_lock_irqsave(&call_function.lock, flags);
 	/*
 	 * Place entry at the _HEAD_ of the list, so that any cpu still
@@ -550,7 +565,7 @@ void smp_call_function_many(const struct cpumask *mask,
 	smp_mb();
 
 	/* Send a message to all CPUs in the map */
-	arch_send_call_function_ipi_mask(data->cpumask);
+	arch_send_call_function_ipi_mask(data->cpumask_ipi);
 
 	/* Optionally wait for the CPUs to complete */
 	if (wait)
@@ -657,6 +672,19 @@ static int __init maxcpus(char *str)
 
 early_param("maxcpus", maxcpus);
 
+static int __init boot_cpus(char *str)
+{
+	alloc_bootmem_cpumask_var(&boot_cpu_mask);
+	if (cpulist_parse(str, boot_cpu_mask) < 0) {
+		pr_warn("SMP: Incorrect boot_cpus cpumask\n");
+		return -EINVAL;
+	}
+	have_boot_cpu_mask = true;
+	return 0;
+}
+
+early_param("boot_cpus", boot_cpus);
+
 /* Setup number of possible processor ids */
 int nr_cpu_ids __read_mostly = NR_CPUS;
 EXPORT_SYMBOL(nr_cpu_ids);
@@ -665,6 +693,21 @@ EXPORT_SYMBOL(nr_cpu_ids);
 void __init setup_nr_cpu_ids(void)
 {
 	nr_cpu_ids = find_last_bit(cpumask_bits(cpu_possible_mask),NR_CPUS) + 1;
+}
+
+/* Should the given CPU be booted during smp_init() ? */
+static inline bool boot_cpu(int cpu)
+{
+	if (!have_boot_cpu_mask)
+		return true;
+
+	return cpumask_test_cpu(cpu, boot_cpu_mask);
+}
+
+static inline void free_boot_cpu_mask(void)
+{
+	if (have_boot_cpu_mask)	/* Allocated from boot_cpus() */
+		free_bootmem_cpumask_var(boot_cpu_mask);
 }
 
 /* Called by boot processor to activate the rest. */
@@ -678,9 +721,11 @@ void __init smp_init(void)
 	for_each_present_cpu(cpu) {
 		if (num_online_cpus() >= setup_max_cpus)
 			break;
-		if (!cpu_online(cpu))
+		if (!cpu_online(cpu) && boot_cpu(cpu))
 			cpu_up(cpu);
 	}
+
+	free_boot_cpu_mask();
 
 	/* Any cleanup work */
 	printk(KERN_INFO "Brought up %ld CPUs\n", (long)num_online_cpus());

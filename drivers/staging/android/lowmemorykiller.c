@@ -126,14 +126,14 @@ static int test_task_flag(struct task_struct *p, int flag)
 {
 	struct task_struct *t = p;
 
-	do {
+	for_each_thread(p,t) {
 		task_lock(t);
 		if (test_tsk_thread_flag(t, flag)) {
 			task_unlock(t);
 			return 1;
 		}
 		task_unlock(t);
-	} while_each_thread(p, t);
+	}
 
 	return 0;
 }
@@ -235,6 +235,11 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 
 		oom_score_adj = p->signal->oom_score_adj;
 		if (oom_score_adj < min_score_adj) {
+			task_unlock(p);
+			continue;
+		}
+		if (fatal_signal_pending(p)) {
+			lowmem_print(2, "skip slow dying process %d\n", p->pid);
 			task_unlock(p);
 			continue;
 		}

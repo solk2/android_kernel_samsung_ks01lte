@@ -10,18 +10,31 @@
 #include <linux/linkage.h>
 #include <linux/list.h>
 
+static __always_inline int preempt_count(void)
+{
+	return current_thread_info()->preempt_count;
+}
+
+static __always_inline int *preempt_count_ptr(void)
+{
+	return &current_thread_info()->preempt_count;
+}
+
+static __always_inline void preempt_count_set(int pc)
+{
+	*preempt_count_ptr() = pc;
+}
+
 #if defined(CONFIG_DEBUG_PREEMPT) || defined(CONFIG_PREEMPT_TRACER)
   extern void add_preempt_count(int val);
   extern void sub_preempt_count(int val);
 #else
-# define add_preempt_count(val)	do { preempt_count() += (val); } while (0)
-# define sub_preempt_count(val)	do { preempt_count() -= (val); } while (0)
+# define add_preempt_count(val)	do { *preempt_count_ptr() += (val); } while (0)
+# define sub_preempt_count(val)	do { *preempt_count_ptr() -= (val); } while (0)
 #endif
 
 #define inc_preempt_count() add_preempt_count(1)
 #define dec_preempt_count() sub_preempt_count(1)
-
-#define preempt_count()	(current_thread_info()->preempt_count)
 
 #ifdef CONFIG_PREEMPT
 
@@ -65,9 +78,9 @@ do { \
 
 /* For debugging and tracer internals only! */
 #define add_preempt_count_notrace(val)			\
-	do { preempt_count() += (val); } while (0)
+	do { *preempt_count_ptr() += (val); } while (0)
 #define sub_preempt_count_notrace(val)			\
-	do { preempt_count() -= (val); } while (0)
+	do { *preempt_count_ptr() -= (val); } while (0)
 #define inc_preempt_count_notrace() add_preempt_count_notrace(1)
 #define dec_preempt_count_notrace() sub_preempt_count_notrace(1)
 
@@ -93,14 +106,20 @@ do { \
 
 #else /* !CONFIG_PREEMPT_COUNT */
 
-#define preempt_disable()		do { } while (0)
-#define sched_preempt_enable_no_resched()	do { } while (0)
-#define preempt_enable_no_resched()	do { } while (0)
-#define preempt_enable()		do { } while (0)
+/*
+ * Even if we don't have any preemption, we need preempt disable/enable
+ * to be barriers, so that we don't have things like get_user/put_user
+ * that can cause faults and scheduling migrate into our preempt-protected
+ * region.
+ */
+#define preempt_disable()		barrier()
+#define sched_preempt_enable_no_resched()	barrier()
+#define preempt_enable_no_resched()	barrier()
+#define preempt_enable()		barrier()
 
-#define preempt_disable_notrace()		do { } while (0)
-#define preempt_enable_no_resched_notrace()	do { } while (0)
-#define preempt_enable_notrace()		do { } while (0)
+#define preempt_disable_notrace()		barrier()
+#define preempt_enable_no_resched_notrace()	barrier()
+#define preempt_enable_notrace()		barrier()
 
 #endif /* CONFIG_PREEMPT_COUNT */
 

@@ -81,16 +81,6 @@
 static void adreno_start_work(struct work_struct *work);
 static void adreno_input_work(struct work_struct *work);
 
-/*
- * The default values for the simpleondemand governor are 90 and 5,
- * we use different values here.
- * They have to be tuned and compare with the tz governor anyway.
- */
-static struct devfreq_simple_ondemand_data adreno_ondemand_data = {
-	.upthreshold = 80,
-	.downdifferential = 20,
-};
-
 static struct devfreq_msm_adreno_tz_data adreno_tz_data = {
 	.bus = {
 		.max = 450,
@@ -98,18 +88,12 @@ static struct devfreq_msm_adreno_tz_data adreno_tz_data = {
 	.device_id = KGSL_DEVICE_3D0,
 };
 
-static const struct devfreq_governor_data adreno_governors[] = {
-	{ .name = "simple_ondemand", .data = &adreno_ondemand_data },
-	{ .name = "msm-adreno-tz", .data = &adreno_tz_data },
-};
-
 static const struct kgsl_functable adreno_functable;
 
 static struct adreno_device device_3d0 = {
 	.dev = {
 		KGSL_DEVICE_COMMON_INIT(device_3d0.dev),
-		.pwrscale = KGSL_PWRSCALE_INIT(adreno_governors,
-					ARRAY_SIZE(adreno_governors)),
+		.pwrscale = KGSL_PWRSCALE_INIT(&adreno_tz_data),
 		.name = DEVICE_3D0_NAME,
 		.id = KGSL_DEVICE_3D0,
 		.mh = {
@@ -255,7 +239,7 @@ static const struct {
 };
 
 /* Nice level for the higher priority GPU start thread */
-static unsigned int _wake_nice = -7;
+static int _wake_nice = -7;
 
 /* Number of milliseconds to stay active active after a wake on touch */
 static unsigned int _wake_timeout = 100;
@@ -272,15 +256,17 @@ static void adreno_input_work(struct work_struct *work)
 			struct adreno_device, input_work);
 	struct kgsl_device *device = &adreno_dev->dev;
 
-	mutex_lock(&device->mutex);
+	if (!_wake_timeout)
+		return;
+
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 
 	device->flags |= KGSL_FLAG_WAKE_ON_TOUCH;
 
 	/*
-	 * Don't schedule adreno_start in a high priority workqueue, we are
-	 * already in a workqueue which should be sufficient
+	 * Schedule adreno_start in a high priority workqueue.
 	 */
-	kgsl_pwrctrl_wake(device, 0);
+	kgsl_pwrctrl_wake(device, 1);
 
 	/*
 	 * When waking up from a touch event we want to stay active long enough
@@ -290,7 +276,7 @@ static void adreno_input_work(struct work_struct *work)
 	 */
 	mod_timer(&device->idle_timer,
 		jiffies + msecs_to_jiffies(_wake_timeout));
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 }
 
 /*
@@ -1154,11 +1140,8 @@ static int adreno_iommu_setstate(struct kgsl_device *device,
 	num_iommu_units = kgsl_mmu_get_num_iommu_units(&device->mmu);
 
 	context = kgsl_context_get(device, context_id);
-	if (!context) {
-		kgsl_mmu_device_setstate(&device->mmu, flags);
-		return 0;
-	}
-	adreno_ctx = ADRENO_CONTEXT(context);
+	if (context)
+		adreno_ctx = ADRENO_CONTEXT(context);
 
 	result = kgsl_mmu_enable_clk(&device->mmu, KGSL_IOMMU_CONTEXT_USER);
 
@@ -1625,17 +1608,19 @@ static int adreno_of_get_iommu(struct device_node *parent,
 			goto err;
 		}
 
-		ret = of_property_read_u32_array(child, "reg", reg_val, 2);
-		if (ret) {
-			KGSL_CORE_ERR("Unable to read KGSL IOMMU 'reg'\n");
+		if (!strcmp("gfx3d_user", ctxs[ctx_index].iommu_ctx_name)) {
+			ctxs[ctx_index].ctx_id = 0;
+		} else if (!strcmp("gfx3d_priv",
+					ctxs[ctx_index].iommu_ctx_name)) {
+			ctxs[ctx_index].ctx_id = 1;
+		} else if (!strcmp("gfx3d_spare",
+					ctxs[ctx_index].iommu_ctx_name)) {
+			ctxs[ctx_index].ctx_id = 2;
+		} else {
+			KGSL_CORE_ERR("dt: IOMMU context %s is invalid\n",
+				ctxs[ctx_index].iommu_ctx_name);
 			goto err;
 		}
-		if (msm_soc_version_supports_iommu_v0())
-			ctxs[ctx_index].ctx_id = (reg_val[0] -
-				data->physstart) >> KGSL_IOMMU_CTX_SHIFT;
-		else
-			ctxs[ctx_index].ctx_id = ((reg_val[0] -
-				data->physstart) >> KGSL_IOMMU_CTX_SHIFT) - 8;
 
 		ctx_index++;
 	}
@@ -2091,7 +2076,7 @@ static void adreno_start_work(struct work_struct *work)
 	/* Nice ourselves to be higher priority but not too high priority */
 	set_user_nice(current, _wake_nice);
 
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 	/*
 	 *  If adreno start is already called, no need to call it again
 	 *  it can lead to unpredictable behavior if we try to start
@@ -2111,7 +2096,7 @@ static void adreno_start_work(struct work_struct *work)
 		_status = _adreno_start(adreno_dev);
 	else
 		_status = 0;
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 }
 
 /**
@@ -2136,9 +2121,9 @@ static int adreno_start(struct kgsl_device *device, int priority)
 	 * higher priority work queue and wait for it to finish
 	 */
 	queue_work(adreno_wq, &adreno_dev->start_work);
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 	flush_work(&adreno_dev->start_work);
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 
 	return _status;
 }
@@ -2238,15 +2223,15 @@ int adreno_reset(struct kgsl_device *device)
  *
  * This is a common routine to write to FT sysfs files.
  */
-static int _ft_sysfs_store(const char *buf, size_t count, unsigned int *ptr)
+static int _ft_sysfs_store(const char *buf, size_t count, int *ptr)
 {
 	char temp[20];
-	unsigned long val;
+	long val;
 	int rc;
 
 	snprintf(temp, sizeof(temp), "%.*s",
 			 (int)min(count, sizeof(temp) - 1), buf);
-	rc = kstrtoul(temp, 0, &val);
+	rc = kstrtol(temp, 0, &val);
 	if (rc)
 		return rc;
 
@@ -2529,6 +2514,36 @@ static ssize_t _wake_timeout_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", _wake_timeout);
 }
 
+/**
+ * _wake_nice_store() - Store nice level for the higher priority GPU start
+ * thread
+ * @dev: device ptr
+ * @attr: Device attribute
+ * @buf: value to write
+ * @count: size of the value to write
+ *
+ */
+static ssize_t _wake_nice_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	return _ft_sysfs_store(buf, count, &_wake_nice);
+}
+
+/**
+ * _wake_nice_show() -  Show nice level for the higher priority GPU start
+ * thread
+ * @dev: device ptr
+ * @attr: Device attribute
+ * @buf: value read
+ */
+static ssize_t _wake_nice_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", _wake_nice);
+}
+
 #define FT_DEVICE_ATTR(name) \
 	DEVICE_ATTR(name, 0644,	_ ## name ## _show, _ ## name ## _store);
 
@@ -2537,7 +2552,7 @@ FT_DEVICE_ATTR(ft_pagefault_policy);
 FT_DEVICE_ATTR(ft_fast_hang_detect);
 FT_DEVICE_ATTR(ft_long_ib_detect);
 
-static DEVICE_INT_ATTR(wake_nice, 0644, _wake_nice);
+static FT_DEVICE_ATTR(wake_nice);
 static FT_DEVICE_ATTR(wake_timeout);
 
 const struct device_attribute *ft_attr_list[] = {
@@ -2545,7 +2560,7 @@ const struct device_attribute *ft_attr_list[] = {
 	&dev_attr_ft_pagefault_policy,
 	&dev_attr_ft_fast_hang_detect,
 	&dev_attr_ft_long_ib_detect,
-	&dev_attr_wake_nice.attr,
+	&dev_attr_wake_nice,
 	&dev_attr_wake_timeout,
 	NULL,
 };
@@ -2781,7 +2796,7 @@ static int adreno_setproperty(struct kgsl_device_private *dev_priv,
  * Return true if the RBBM status register for the GPU type indicates that the
  * hardware is idle
  */
-static bool adreno_hw_isidle(struct kgsl_device *device)
+bool adreno_hw_isidle(struct kgsl_device *device)
 {
 	unsigned int reg_rbbm_status;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
@@ -2893,6 +2908,12 @@ bool adreno_isidle(struct kgsl_device *device)
 		return true;
 
 	rptr = adreno_get_rptr(&adreno_dev->ringbuffer);
+
+	/*
+	 * wptr is updated when we add commands to ringbuffer, add a barrier
+	 * to make sure updated wptr is compared to rptr
+	 */
+	smp_mb();
 
 	if (rptr == adreno_dev->ringbuffer.wptr)
 		return adreno_hw_isidle(device);
