@@ -162,8 +162,7 @@ static int brcm_init_wlan_mem(void)
 #define GPIO_WL_REG_ON 308
 #elif defined(CONFIG_SEC_H_PROJECT) || defined(CONFIG_SEC_VIENNA_PROJECT) || defined(CONFIG_SEC_LT03_PROJECT) ||\
       defined(CONFIG_SEC_PICASSO_PROJECT) || defined(CONFIG_SEC_V2_PROJECT) || defined(CONFIG_SEC_JS_PROJECT) ||\
-      defined(CONFIG_SEC_F_PROJECT) || defined(CONFIG_SEC_MONTBLANC_PROJECT) || defined(CONFIG_SEC_KACTIVE_PROJECT) ||\
-      defined(CONFIG_SEC_FRESCO_PROJECT)
+      defined(CONFIG_SEC_F_PROJECT) || defined(CONFIG_SEC_MONTBLANC_PROJECT) || defined(CONFIG_SEC_KACTIVE_PROJECT)
 #define GPIO_WL_REG_ON 53
 #elif defined(CONFIG_MACH_MELIUSCASKT) || defined(CONFIG_MACH_MELIUSCAKTT) || defined(CONFIG_MACH_MELIUSCALGT)
 #define GPIO_WL_REG_ON 100
@@ -171,11 +170,7 @@ static int brcm_init_wlan_mem(void)
 
 /* MSM8974 WLAN_HOST_WAKE GPIO Number */
 #if defined(CONFIG_SEC_K_PROJECT) || defined(CONFIG_SEC_KACTIVE_PROJECT)
-#if defined(CONFIG_MACH_KLTE_JPN)
-#define GPIO_WL_HOST_WAKE 73
-#else
 #define GPIO_WL_HOST_WAKE 92
-#endif
 #else
 #define GPIO_WL_HOST_WAKE 54
 #endif
@@ -225,7 +220,7 @@ int __init brcm_wifi_init_gpio(void)
 			"failed to pull down\n", __func__);
 #endif /* not defined CONFIG_SEC_KS01_PROJECT */
 
-#if defined(CONFIG_SEC_K_PROJECT)
+#if defined(CONFIG_SEC_K_PROJECT) || defined(CONFIG_SEC_KACTIVE_PROJECT)
 	if (system_rev == 4) {
 		printk("WLAN: Skip wlan irq setting..\n");
 	}
@@ -492,8 +487,8 @@ int __init brcm_wlan_init(void)
 	brcm_init_wlan_mem();
 #endif
 
-#if defined(CONFIG_SEC_K_PROJECT)
-	if (system_rev >= 5)
+#if defined(CONFIG_SEC_K_PROJECT) || defined(CONFIG_SEC_KACTIVE_PROJECT)
+	if (system_rev >= 4)
 		return platform_device_register(&brcm_device_wlan);
 	else
 		return -1;

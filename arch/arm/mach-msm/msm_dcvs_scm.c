@@ -16,9 +16,9 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
+#include <linux/memory_alloc.h>
 #include <asm/cacheflush.h>
 #include <mach/memory.h>
-#include <linux/dma-mapping.h>
 #include <mach/scm.h>
 #include <mach/msm_dcvs_scm.h>
 #include <trace/events/mpdcvs_trace.h>
@@ -61,35 +61,26 @@ struct msm_algo_param {
 
 int msm_dcvs_scm_init(size_t size)
 {
-        int ret = 0;
-        struct scm_init init;
-	void *cpu_addr;
-	struct device dev = { 0 };
-	dma_addr_t paddr;
-	DEFINE_DMA_ATTRS(attrs);
+	int ret = 0;
+	struct scm_init init;
+	uint32_t p = 0;
 
-	dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &attrs);
-	dev.coherent_dma_mask = DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
-	cpu_addr = dma_alloc_attrs(&dev, size, &paddr, GFP_KERNEL, &attrs);
+	/* Allocate word aligned non-cacheable memory */
+	p = allocate_contiguous_ebi_nomap(size, 4);
+	if (!p)
+		return -ENOMEM;
 
-        if (!cpu_addr) {
-		pr_err("%s: Failed to allocate %d bytes for cmd buf\n",__func__, size);
-                return -ENOMEM;
-	}
+	init.phy = p;
+	init.size = size;
 
-        init.phy = (unsigned int)paddr;;
-        init.size = size;
+	ret = scm_call(SCM_SVC_DCVS, DCVS_CMD_INIT,
+			&init, sizeof(init), NULL, 0);
 
-        ret = scm_call(SCM_SVC_DCVS, DCVS_CMD_INIT,
-                        &init, sizeof(init), NULL, 0);
+	/* Not freed if the initialization succeeds */
+	if (ret)
+		free_contiguous_memory_by_paddr(p);
 
-        /* Not freed if the initialization succeeds */
-        if (ret) {
-		pr_err("%s: scm_call DCVS_CMD_INIT failed\n",__func__);
-		dma_free_coherent(&dev, size, cpu_addr, paddr);
-        }
-
-        return ret;
+	return ret;
 }
 EXPORT_SYMBOL(msm_dcvs_scm_init);
 
