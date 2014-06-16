@@ -88,32 +88,32 @@
 			label = "qseecom_mem";
 		};
 
-               fb_mem: fb_region {
-                       linux,reserve-contiguous-region;
-                       reg = <0 0x800000>;
-                       label = "fb_mem";
-               };
+		fb_mem: fb_region {
+			linux,reserve-contiguous-region;
+			reg = <0 0x800000>;
+			label = "fb_mem";
+		};
 
-               audio_mem: audio_region {
-                       linux,reserve-contiguous-region;
-                       linux,reserve-region;
-                       reg = <0 0x614000>;
-                       label = "audio_mem";
-               };
+		audio_mem: audio_region {
+			linux,reserve-contiguous-region;
+			linux,reserve-region;
+			reg = <0 0x614000>;
+			label = "audio_mem";
+		};
 
-               peripheral_mem: peripheral_region@5d00000 {
-                       linux,reserve-contiguous-region;
-                       linux,reserve-region;
-                       linux,remove-completely;
-                       reg = <0x6c00000 0xa600000>;
-                       label = "peripheral_mem";
-               };
+		peripheral_mem: peripheral_region@5d00000 {
+			linux,reserve-contiguous-region;
+			linux,reserve-region;
+			linux,remove-completely;
+			reg = <0x6c00000 0xa600000>;
+			label = "peripheral_mem";
+		};
 
-               camera_mem: camera_region {
-                       linux,reserve-contiguous-region;
-                       reg = <0 0x1E00000>;
-                       label = "camera_mem";
-               };
+		camera_mem: camera_region {
+			linux,reserve-contiguous-region;
+			reg = <0 0x1E00000>;
+			label = "camera_mem";
+		};
 
 	};
 
@@ -242,7 +242,7 @@
 		vdd-supply = <&gdsc_venus>;
 		qcom,hfi = "venus";
 		qcom,ocmem-size = <524288>; /* 512 * 1024 */
-		qcom,max-hw-load = <1224450>; /* 4k @ 30 + 1080p @ 30*/
+		qcom,max-hw-load = <1224450>; /* 4K @ 30 + 1080p @ 30*/
 	};
 
 	qcom,vidc {
@@ -2412,7 +2412,7 @@
 		qcom,hotplug-temp-hysteresis = <20>;
 		qcom,cpu-sensors = "tsens_tz_sensor5", "tsens_tz_sensor6",
 				"tsens_tz_sensor7", "tsens_tz_sensor8";
-		qcom,freq-mitigation-temp = <110>;
+                qcom,freq-mitigation-temp = <110>;
 		qcom,freq-mitigation-temp-hysteresis = <20>;
 		qcom,freq-mitigation-value = <960000>;
 		qcom,freq-mitigation-control-mask = <0x01>;
