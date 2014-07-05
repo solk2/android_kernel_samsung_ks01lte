@@ -398,7 +398,6 @@
 	sound {
 		qcom,model = "msm8974-taiko-cdp-snd-card";
 		qcom,hdmi-audio-rx;
-		qcom,us-euro-gpios = <&pm8941_gpios 20 0>;
 		qcom,cdc-micbias2-headset-only;
 	};
 
