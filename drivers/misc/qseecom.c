@@ -917,6 +917,7 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 		}
 		spin_unlock_irqrestore(
 		&qseecom.registered_app_list_lock, flags);
+		ret = 0;
 	} else {
 		pr_warn("App (%s) does'nt exist, loading apps for first time\n",
 			(char *)(load_img_req.img_name));
@@ -2947,9 +2948,10 @@ static int __qseecom_delete_saved_key(struct qseecom_dev_handle *data,
 	struct qseecom_command_scm_resp resp;
 	int ret;
 
-	if (usage != QSEOS_KM_USAGE_DISK_ENCRYPTION) {
-		pr_err("Error:: unsupported usage %d\n", usage);
-		return -EFAULT;
+	if (usage < QSEOS_KM_USAGE_DISK_ENCRYPTION ||
+		usage >= QSEOS_KM_USAGE_MAX) {
+			pr_err("Error:: unsupported usage %d\n", usage);
+			return -EFAULT;
 	}
 
 	__qseecom_enable_clk(CLK_QSEE);

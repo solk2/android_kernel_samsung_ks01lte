@@ -129,6 +129,8 @@ struct msm_compr_audio {
 	uint32_t stream_available;
 	uint32_t next_stream;
 
+	uint64_t marker_timestamp;
+
 	struct msm_compr_gapless_state gapless_state;
 
 	atomic_t start;
@@ -575,12 +577,6 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 	int dir = IN, ret = 0;
 	struct audio_client *ac = prtd->audio_client;
 	uint32_t stream_index;
-	struct asm_softpause_params softpause = {
-		.enable = SOFT_PAUSE_ENABLE,
-		.period = SOFT_PAUSE_PERIOD,
-		.step = SOFT_PAUSE_STEP,
-		.rampingcurve = SOFT_PAUSE_CURVE_LINEAR,
-	};
 	struct asm_softvolume_params softvol = {
 		.period = SOFT_VOLUME_PERIOD,
 		.step = SOFT_VOLUME_STEP,
@@ -610,10 +606,15 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 				prtd->session_id,
 				SNDRV_PCM_STREAM_PLAYBACK);
 
-	ret = q6asm_set_softpause(ac, &softpause);
+	/*
+	 * Setting the master volume gain to 0 while
+	 * configuring ASM session. This is to address
+	 * DSP pop noise issue where. This change is
+	 * there from begining may be DSP limitation
+	 */
+	ret = msm_compr_set_volume(cstream, 0, 0);
 	if (ret < 0)
-		pr_err("%s: Send SoftPause Param failed ret=%d\n",
-			__func__, ret);
+		pr_err("%s : Set Volume failed : %d", __func__, ret);
 
 	ret = q6asm_set_softvolume(ac, &softvol);
 	if (ret < 0)
@@ -670,6 +671,7 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 		return -ENOMEM;
 	}
 
+	runtime->private_data = NULL;
 	prtd->cstream = cstream;
 	pdata->cstream[rtd->dai_link->be_id] = cstream;
 	pdata->audio_effects[rtd->dai_link->be_id] =
@@ -760,18 +762,38 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 
 static int msm_compr_free(struct snd_compr_stream *cstream)
 {
-	struct snd_compr_runtime *runtime = cstream->runtime;
-	struct msm_compr_audio *prtd = runtime->private_data;
-	struct snd_soc_pcm_runtime *soc_prtd = cstream->private_data;
-	struct msm_compr_pdata *pdata =
-			snd_soc_platform_get_drvdata(soc_prtd->platform);
-	struct audio_client *ac = prtd->audio_client;
+	struct snd_compr_runtime *runtime;
+	struct msm_compr_audio *prtd;
+	struct snd_soc_pcm_runtime *soc_prtd;
+	struct msm_compr_pdata *pdata;
+	struct audio_client *ac;
 	int dir = IN, ret = 0, stream_id;
 	unsigned long flags;
 	uint32_t stream_index;
 
 	pr_debug("%s\n", __func__);
 
+	if (!cstream) {
+		pr_err("%s cstream is null\n", __func__);
+		return 0;
+	}
+	runtime = cstream->runtime;
+	soc_prtd = cstream->private_data;
+	if (!runtime || !soc_prtd || !(soc_prtd->platform)) {
+		pr_err("%s runtime or soc_prtd or platform is null\n", __func__);
+		return 0;
+	}
+	prtd = runtime->private_data;
+	if (!prtd) {
+		pr_err("%s prtd is null\n", __func__);
+		return 0;
+	}
+	pdata = snd_soc_platform_get_drvdata(soc_prtd->platform);
+	ac = prtd->audio_client;
+	if (!pdata || !ac) {
+		pr_err("%s pdata or ac is null\n", __func__);
+		return 0;
+	}
 	if (atomic_read(&prtd->eos)) {
 		ret = wait_event_timeout(prtd->eos_wait,
 					 prtd->cmd_ack, 5 * HZ);
@@ -1082,6 +1104,7 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 		prtd->app_pointer  = 0;
 		prtd->bytes_received = 0;
 		prtd->bytes_sent = 0;
+		prtd->marker_timestamp = 0;
 
 		atomic_set(&prtd->xrun, 0);
 		spin_unlock_irqrestore(&prtd->lock, flags);
@@ -1214,6 +1237,8 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 			prtd->first_buffer = 1;
 			prtd->last_buffer = 0;
 			prtd->gapless_state.gapless_transition = 1;
+			prtd->marker_timestamp = 0;
+
 			/*
 			Don't reset these as these vars map to
 			total_bytes_transferred and total_bytes_available
@@ -1269,23 +1294,23 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 			q6asm_stream_cmd_nowait(ac, CMD_PAUSE, ac->stream_id);
 			prtd->cmd_ack = 0;
 			spin_unlock_irqrestore(&prtd->lock, flags);
-			pr_debug("%s:issue CMD_FLUSH ac->stream_id %d",
-					      __func__, ac->stream_id);
-			q6asm_stream_cmd(ac, CMD_FLUSH, ac->stream_id);
-			wait_event_timeout(prtd->flush_wait,
-					   prtd->cmd_ack, 1 * HZ / 4);
 
+			/*
+			 * Cache this time as last known time
+			 */
+			q6asm_get_session_time(prtd->audio_client,
+					       &prtd->marker_timestamp);
 			spin_lock_irqsave(&prtd->lock, flags);
 			/*
-			Don't reset these as these vars map to
-			total_bytes_transferred and total_bytes_available
-			directly, only total_bytes_transferred will be updated
-			in the next avail() ioctl
-			prtd->copied_total = 0;
-			prtd->bytes_received = 0;
-			do not reset prtd->bytes_sent as well as the same
-			session is used for gapless playback
-			*/
+			 * Don't reset these as these vars map to
+			 * total_bytes_transferred and total_bytes_available.
+			 * Just total_bytes_transferred will be updated
+			 * in the next avail() ioctl.
+			 * prtd->copied_total = 0;
+			 * prtd->bytes_received = 0;
+			 * do not reset prtd->bytes_sent as well as the same
+			 * session is used for gapless playback
+			 */
 			prtd->byte_offset = 0;
 
 			prtd->app_pointer  = 0;
@@ -1293,8 +1318,15 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 			prtd->last_buffer = 0;
 			atomic_set(&prtd->drain, 0);
 			atomic_set(&prtd->xrun, 1);
-			q6asm_run_nowait(prtd->audio_client, 0, 0, 0);
 			spin_unlock_irqrestore(&prtd->lock, flags);
+
+			pr_debug("%s:issue CMD_FLUSH ac->stream_id %d",
+					      __func__, ac->stream_id);
+			q6asm_stream_cmd(ac, CMD_FLUSH, ac->stream_id);
+			wait_event_timeout(prtd->flush_wait,
+					   prtd->cmd_ack, 1 * HZ / 4);
+
+			q6asm_run_nowait(prtd->audio_client, 0, 0, 0);
 		}
 		prtd->cmd_interrupt = 0;
 		break;
@@ -1422,6 +1454,8 @@ static int msm_compr_pointer(struct snd_compr_stream *cstream,
 				__func__, timestamp);
 			return -EAGAIN;
 		}
+	} else {
+		timestamp = prtd->marker_timestamp;
 	}
 
 	/* DSP returns timestamp in usec */
@@ -1551,6 +1585,10 @@ static int msm_compr_get_caps(struct snd_compr_stream *cstream,
 	struct msm_compr_audio *prtd = runtime->private_data;
 
 	pr_debug("%s\n", __func__);
+	if (!prtd || !arg) {
+		pr_err("%s prtd or arg is null\n", __func__);
+		return -EINVAL;
+	}
 	memcpy(arg, &prtd->compr_cap, sizeof(struct snd_compr_caps));
 
 	return 0;
