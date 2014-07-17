@@ -520,8 +520,8 @@ struct vss_imemory_cmd_unmap_t {
 #define VSS_IRECORD_PORT_ID_DEFAULT			0x0000FFFF
 /* Default AFE port ID. */
 
-#define VSS_IRECORD_PORT_ID_TX_RX			0x00008003
 /* Port explicitly identifying TX and RX streams */
+#define VSS_IRECORD_PORT_ID_TX_RX			0x00008003
 
 #define VSS_IRECORD_TAP_POINT_NONE			0x00010F78
 /* Indicates no tapping for specified path. */
@@ -1388,7 +1388,7 @@ struct cal_mem {
 	void *buf;
 };
 
-#define MAX_VOC_SESSIONS 5
+#define MAX_VOC_SESSIONS 6
 
 struct common_data {
 	/* these default values are for all devices */
@@ -1462,21 +1462,25 @@ enum {
 #define VOC_PATH_VOLTE_PASSIVE 2
 #define VOC_PATH_VOICE2_PASSIVE 3
 #define VOC_PATH_QCHAT_PASSIVE 4
+#define VOC_PATH_VOWLAN_PASSIVE 5
 
 #define MAX_SESSION_NAME_LEN 32
-#define VOICE_SESSION_NAME  "Voice session"
-#define VOIP_SESSION_NAME   "VoIP session"
-#define VOLTE_SESSION_NAME  "VoLTE session"
-#define VOICE2_SESSION_NAME "Voice2 session"
-#define QCHAT_SESSION_NAME  "QCHAT session"
+#define VOICE_SESSION_NAME   "Voice session"
+#define VOIP_SESSION_NAME    "VoIP session"
+#define VOLTE_SESSION_NAME   "VoLTE session"
+#define VOICE2_SESSION_NAME  "Voice2 session"
+#define QCHAT_SESSION_NAME   "QCHAT session"
+#define VOWLAN_SESSION_NAME  "VoWLAN session"
 
 #define VOICE2_SESSION_VSID_STR "10DC1000"
 #define QCHAT_SESSION_VSID_STR "10803000"
+#define VOWLAN_SESSION_VSID_STR "10002000"
 #define VOICE_SESSION_VSID  0x10C01000
 #define VOICE2_SESSION_VSID 0x10DC1000
 #define VOLTE_SESSION_VSID  0x10C02000
 #define VOIP_SESSION_VSID   0x10004000
 #define QCHAT_SESSION_VSID  0x10803000
+#define VOWLAN_SESSION_VSID 0x10002000
 #define ALL_SESSION_VSID    0xFFFFFFFF
 #define VSID_MAX            ALL_SESSION_VSID
 
@@ -1515,8 +1519,8 @@ int voc_set_rx_vol_step(uint32_t session_id, uint32_t dir, uint32_t vol_step,
 			uint32_t ramp_duration);
 int voc_set_tx_mute(uint32_t session_id, uint32_t dir, uint32_t mute,
 		    uint32_t ramp_duration);
-int voc_set_rx_device_mute(uint32_t session_id, uint32_t mute,
-			   uint32_t ramp_duration);
+int voc_set_device_mute(uint32_t session_id, uint32_t dir, uint32_t mute,
+			uint32_t ramp_duration);
 int voc_get_rx_device_mute(uint32_t session_id);
 int voc_disable_cvp(uint32_t session_id);
 int voc_enable_cvp(uint32_t session_id);
@@ -1543,5 +1547,7 @@ int voc_get_loopback_enable(void);
 void voc_set_loopback_enable(int loopback_enable);
 int voc_set_ext_ec_ref(uint16_t port_id, bool state);
 int voc_update_amr_vocoder_rate(uint32_t session_id);
+int voc_disable_device(uint32_t session_id);
+int voc_enable_device(uint32_t session_id);
 
 #endif

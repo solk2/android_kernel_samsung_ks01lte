@@ -75,6 +75,14 @@ static bool is_qchat(struct msm_voice *pqchat)
 		return false;
 }
 
+static bool is_vowlan(struct msm_voice *pvowlan)
+{
+	if (pvowlan == &voice_info[VOWLAN_SESSION_INDEX])
+		return true;
+	else
+		return false;
+}
+
 static uint32_t get_session_id(struct msm_voice *pvoc)
 {
 	uint32_t session_id = 0;
@@ -85,6 +93,8 @@ static uint32_t get_session_id(struct msm_voice *pvoc)
 		session_id = voc_get_session_id(VOICE2_SESSION_NAME);
 	else if (is_qchat(pvoc))
 		session_id = voc_get_session_id(QCHAT_SESSION_NAME);
+	else if (is_vowlan(pvoc))
+
 	else
 		session_id = voc_get_session_id(VOICE_SESSION_NAME);
 
@@ -133,6 +143,10 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 	} else if (!strncmp("QCHAT", substream->pcm->id, 5)) {
 		voice = &voice_info[QCHAT_SESSION_INDEX];
 		pr_debug("%s: Open QCHAT Substream Id=%s\n",
+			 __func__, substream->pcm->id);
+	} else if (!strncmp("VoWLAN", substream->pcm->id, 6)) {
+		voice = &voice_info[VOWLAN_SESSION_INDEX];
+		pr_debug("%s: Open VoWLAN Substream Id=%s\n",
 			 __func__, substream->pcm->id);
 	} else {
 		voice = &voice_info[VOICE_SESSION_INDEX];
@@ -497,6 +511,7 @@ static int msm_voice_tty_mode_put(struct snd_kcontrol *kcontrol,
 	voc_set_tty_mode(voc_get_session_id(VOICE_SESSION_NAME), tty_mode);
 	voc_set_tty_mode(voc_get_session_id(VOICE2_SESSION_NAME), tty_mode);
 	voc_set_tty_mode(voc_get_session_id(VOLTE_SESSION_NAME), tty_mode);
+	voc_set_tty_mode(voc_get_session_id(VOWLAN_SESSION_NAME), tty_mode);
 
 	return 0;
 }
@@ -553,6 +568,8 @@ static int msm_voice_slowtalk_get(struct snd_kcontrol *kcontrol,
 static struct snd_kcontrol_new msm_voice_controls[] = {
 	SOC_SINGLE_MULTI_EXT("Voice Rx Device Mute", SND_SOC_NOPM, 0, VSID_MAX,
 				0, 3, NULL, msm_voice_rx_device_mute_put),
+	SOC_SINGLE_MULTI_EXT("Voice Tx Device Mute", SND_SOC_NOPM, 0, VSID_MAX,
+				0, 3, NULL, msm_voice_tx_device_mute_put),
 	SOC_SINGLE_MULTI_EXT("Voice Tx Mute", SND_SOC_NOPM, 0, VSID_MAX,
 				0, 3, NULL, msm_voice_mute_put),
 	SOC_SINGLE_MULTI_EXT("Voice Rx Gain", SND_SOC_NOPM, 0, VSID_MAX, 0, 3,
@@ -560,15 +577,15 @@ static struct snd_kcontrol_new msm_voice_controls[] = {
 	SOC_ENUM_EXT("TTY Mode", msm_tty_mode_enum[0], msm_voice_tty_mode_get,
 				msm_voice_tty_mode_put),
 	SOC_SINGLE_MULTI_EXT("Slowtalk Enable", SND_SOC_NOPM, 0, VSID_MAX, 0, 2,
-				msm_voice_slowtalk_get, msm_voice_slowtalk_put),
+				NULL, msm_voice_slowtalk_put),
 #ifdef CONFIG_SEC_DHA_SOL_MAL
 	SOC_SINGLE_MULTI_EXT("Sec Set DHA data", SND_SOC_NOPM, 0, 65535, 0, 14,
 				msm_sec_dha_get, msm_sec_dha_put),
 #endif	/* CONFIG_SEC_DHA_SOL_MAL */
 	SOC_SINGLE_EXT("Loopback Enable", SND_SOC_NOPM, 0, 1, 0,
 				msm_loopback_get, msm_loopback_put),
-	// Dummy control to expose stereo recording support in kernel to user-space
-	SOC_SINGLE_EXT("Stereo Recording", SND_SOC_NOPM, 0, VSID_MAX, 0, NULL, NULL),
+	/* Dummy control to expose stereo recording support in kernel to user-space */
+	SOC_SINGLE_EXT("Stereo Recording", SND_SOC_NOPM, 1, VSID_MAX, 0, NULL, NULL),
 };
 
 static struct snd_pcm_ops msm_pcm_ops = {
