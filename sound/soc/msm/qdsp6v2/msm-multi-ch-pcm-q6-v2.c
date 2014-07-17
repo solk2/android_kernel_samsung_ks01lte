@@ -47,7 +47,6 @@ static struct snd_msm_volume multi_ch_pcm_audio = {NULL, 0x2000};
 
 #define PLAYBACK_NUM_PERIODS	8
 #define PLAYBACK_PERIOD_SIZE	4032
-#define PLAYBACK_PERIOD_SIZE_MAX 16384
 #define CAPTURE_NUM_PERIODS	16
 #define CAPTURE_PERIOD_SIZE	320
 
@@ -84,9 +83,9 @@ static struct snd_pcm_hardware msm_pcm_hardware_playback = {
 	.rate_max =             192000,
 	.channels_min =         1,
 	.channels_max =         6,
-	.buffer_bytes_max =     PLAYBACK_NUM_PERIODS * PLAYBACK_PERIOD_SIZE_MAX,
+	.buffer_bytes_max =     PLAYBACK_NUM_PERIODS * PLAYBACK_PERIOD_SIZE,
 	.period_bytes_min =	PLAYBACK_PERIOD_SIZE,
-	.period_bytes_max =     PLAYBACK_PERIOD_SIZE_MAX,
+	.period_bytes_max =     PLAYBACK_PERIOD_SIZE,
 	.periods_min =          PLAYBACK_NUM_PERIODS,
 	.periods_max =          PLAYBACK_NUM_PERIODS,
 	.fifo_size =            0,

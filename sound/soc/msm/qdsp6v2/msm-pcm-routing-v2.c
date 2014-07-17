@@ -37,6 +37,8 @@
 #include "q6voice.h"
 #include "q6core.h"
 
+extern u32 score;
+
 #ifdef CONFIG_SND_SOC_MAX98504 // Vinay
 extern int32_t dsm_open(int32_t port_id,uint32_t*  dsm_params, u8* user_params);
 #endif
@@ -4760,10 +4762,6 @@ static int msm_routing_probe(struct snd_soc_platform *platform)
 	snd_soc_add_platform_controls(platform,
 				dolby_dap_param_end_point_controls,
 			ARRAY_SIZE(dolby_dap_param_end_point_controls));
-
-	snd_soc_add_platform_controls(platform,
-				ec_ref_rx_mixer_controls,
-			ARRAY_SIZE(ec_ref_rx_mixer_controls));
 
 	snd_soc_add_platform_controls(platform,
 				get_rms_controls,

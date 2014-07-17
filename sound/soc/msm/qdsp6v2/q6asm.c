@@ -105,7 +105,7 @@ static int in_cont_index;
 static int out_cold_index;
 static char *out_buffer;
 static char *in_buffer;
-
+u32 score;
 
 int q6asm_mmap_apr_dereg(void)
 {
