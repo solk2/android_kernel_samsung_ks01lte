@@ -94,7 +94,7 @@ static uint32_t get_session_id(struct msm_voice *pvoc)
 	else if (is_qchat(pvoc))
 		session_id = voc_get_session_id(QCHAT_SESSION_NAME);
 	else if (is_vowlan(pvoc))
-
+		session_id = voc_get_session_id(VOWLAN_SESSION_NAME);
 	else
 		session_id = voc_get_session_id(VOICE_SESSION_NAME);
 
@@ -438,12 +438,37 @@ static int msm_voice_mute_put(struct snd_kcontrol *kcontrol,
 	pr_debug("%s: mute=%d session_id=%#x ramp_duration=%d\n", __func__,
 		mute, session_id, ramp_duration);
 
-	voc_set_tx_mute(session_id, TX_PATH, mute, ramp_duration);
+	ret = voc_set_tx_mute(session_id, TX_PATH, mute, ramp_duration);
 
 done:
 	return ret;
 }
 
+static int msm_voice_tx_device_mute_put(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = 0;
+	int mute = ucontrol->value.integer.value[0];
+	uint32_t session_id = ucontrol->value.integer.value[1];
+	int ramp_duration = ucontrol->value.integer.value[2];
+
+	if ((mute < 0) || (mute > 1) || (ramp_duration < 0) ||
+	    (ramp_duration > MAX_RAMP_DURATION)) {
+		pr_err(" %s Invalid arguments", __func__);
+
+		ret = -EINVAL;
+		goto done;
+	}
+
+	pr_debug("%s: mute=%d session_id=%#x ramp_duration=%d\n", __func__,
+		 mute, session_id, ramp_duration);
+	
+	ret = voc_set_device_mute(session_id, VSS_IVOLUME_DIRECTION_TX,
+				  mute, ramp_duration);
+
+done:
+	return ret;
+}
 
 static int msm_voice_rx_device_mute_put(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
@@ -464,7 +489,8 @@ static int msm_voice_rx_device_mute_put(struct snd_kcontrol *kcontrol,
 	pr_debug("%s: mute=%d session_id=%#x ramp_duration=%d\n", __func__,
 		mute, session_id, ramp_duration);
 
-	voc_set_rx_device_mute(session_id, mute, ramp_duration);
+	voc_set_device_mute(session_id, VSS_IVOLUME_DIRECTION_RX,
+			    mute, ramp_duration);
 
 done:
 	return ret;
@@ -577,7 +603,7 @@ static struct snd_kcontrol_new msm_voice_controls[] = {
 	SOC_ENUM_EXT("TTY Mode", msm_tty_mode_enum[0], msm_voice_tty_mode_get,
 				msm_voice_tty_mode_put),
 	SOC_SINGLE_MULTI_EXT("Slowtalk Enable", SND_SOC_NOPM, 0, VSID_MAX, 0, 2,
-				NULL, msm_voice_slowtalk_put),
+				msm_voice_slowtalk_get, msm_voice_slowtalk_put),
 #ifdef CONFIG_SEC_DHA_SOL_MAL
 	SOC_SINGLE_MULTI_EXT("Sec Set DHA data", SND_SOC_NOPM, 0, 65535, 0, 14,
 				msm_sec_dha_get, msm_sec_dha_put),

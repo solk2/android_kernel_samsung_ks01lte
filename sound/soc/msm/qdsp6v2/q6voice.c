@@ -514,6 +514,7 @@ static int voice_apr_register(uint32_t session_id)
 				pr_err("%s: Unable to register MVM for MODEM\n",
 					__func__);
 #endif
+		}
 	}
 
 	if (common.apr_q6_cvs == NULL) {
@@ -543,6 +544,7 @@ static int voice_apr_register(uint32_t session_id)
 				pr_err("%s: Unable to register CVS for MODEM\n",
 					__func__);
 #endif
+		}
 	}
 
 	if (common.apr_q6_cvp == NULL) {
@@ -573,6 +575,7 @@ static int voice_apr_register(uint32_t session_id)
 				pr_err("%s: Unable to register CVP for MODEM\n",
 					__func__);
 #endif
+		}
 	}
 
 	mutex_unlock(&common.common_lock);
@@ -4583,6 +4586,7 @@ static int voc_enable_cvp(uint32_t session_id)
 			goto fail;
 		}
 
+		voice_send_tty_mode_cmd(v);
 		if (v->st_enable && !v->tty_mode)
 			voice_send_set_pp_enable_cmd(v,
 					     MODULE_ID_VOICE_MODULE_ST,
@@ -4664,8 +4668,8 @@ int voc_set_tx_mute(uint32_t session_id, uint32_t dir, uint32_t mute,
 	return ret;
 }
 
-int voc_set_device_mute(uint32_t session_id, uint32_t mute,
-					uint32_t ramp_duration)
+int voc_set_device_mute(uint32_t session_id, uint32_t dir, uint32_t mute,
+			uint32_t ramp_duration)
 {
 	struct voice_data *v = NULL;
 	int ret = 0;
