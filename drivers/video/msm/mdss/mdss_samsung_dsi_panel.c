@@ -1981,8 +1981,8 @@ static int mipi_samsung_disp_send_cmd(
 				cmd_size = make_brightcontrol_hbm_set(msd.dstat.bright_level);
 				msd.dstat.hbm_mode = 1;
 			} else {
-				msd.dstat.hbm_mode = 0;
 				cmd_size = make_brightcontrol_set(msd.dstat.bright_level);
+				msd.dstat.hbm_mode = 0;
 			}
 #else
 			cmd_size = make_brightcontrol_set(msd.dstat.bright_level);
