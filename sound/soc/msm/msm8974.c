@@ -2972,7 +2972,7 @@ static struct snd_soc_dai_link msm8974_common_dai_links[] = {
 		.ignore_suspend = 1,
 	},
 	/* Incall Music 2 BACK END DAI Link */
-/*	{
+	{
 		.name = LPASS_BE_VOICE2_PLAYBACK_TX,
 		.stream_name = "Voice2 Farend Playback",
 		.cpu_dai_name = "msm-dai-q6-dev.32770",
@@ -2983,7 +2983,7 @@ static struct snd_soc_dai_link msm8974_common_dai_links[] = {
 		.be_id = MSM_BACKEND_DAI_VOICE2_PLAYBACK_TX,
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
 		.ignore_suspend = 1,
-	}*/
+	}
 };
 
 static struct snd_soc_dai_link msm8974_hdmi_dai_link[] = {
