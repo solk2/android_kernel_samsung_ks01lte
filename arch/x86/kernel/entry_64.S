@@ -55,7 +55,10 @@
 #include <asm/paravirt.h>
 #include <asm/ftrace.h>
 #include <asm/percpu.h>
+<<<<<<< HEAD
 #include <asm/pgtable_types.h>
+=======
+>>>>>>> 5878f5dae586fb8ec6f5d5d75ed7e5812b7f9eff
 #include <linux/err.h>
 
 /* Avoid __ASSEMBLER__'ifying <linux/audit.h> just for this.  */
@@ -902,6 +905,7 @@ restore_args:
 irq_return:
 	INTERRUPT_RETURN
 
+<<<<<<< HEAD
 ENTRY(native_iret)
 	/*
 	 * Are we returning to a stack segment from the LDT?  Note: in
@@ -943,6 +947,19 @@ native_irq_return_ldt:
 	movq %rax,%rsp
 	popq_cfi %rax
 	jmp native_irq_return_iret
+=======
+	.section __ex_table, "a"
+	.quad irq_return, bad_iret
+	.previous
+
+#ifdef CONFIG_PARAVIRT
+ENTRY(native_iret)
+	iretq
+
+	.section __ex_table,"a"
+	.quad native_iret, bad_iret
+	.previous
+>>>>>>> 5878f5dae586fb8ec6f5d5d75ed7e5812b7f9eff
 #endif
 
 	.section .fixup,"ax"
@@ -1008,6 +1025,7 @@ ENTRY(retint_kernel)
 	call preempt_schedule_irq
 	jmp exit_intr
 #endif
+<<<<<<< HEAD
 	CFI_ENDPROC
 END(common_interrupt)
 
@@ -1042,6 +1060,11 @@ END(__do_double_fault)
 # define __do_double_fault do_double_fault
 #endif
 
+=======
+
+	CFI_ENDPROC
+END(common_interrupt)
+>>>>>>> 5878f5dae586fb8ec6f5d5d75ed7e5812b7f9eff
 /*
  * End of kprobes section
  */
@@ -1217,7 +1240,11 @@ zeroentry overflow do_overflow
 zeroentry bounds do_bounds
 zeroentry invalid_op do_invalid_op
 zeroentry device_not_available do_device_not_available
+<<<<<<< HEAD
 paranoiderrorentry double_fault __do_double_fault
+=======
+paranoiderrorentry double_fault do_double_fault
+>>>>>>> 5878f5dae586fb8ec6f5d5d75ed7e5812b7f9eff
 zeroentry coprocessor_segment_overrun do_coprocessor_segment_overrun
 errorentry invalid_TSS do_invalid_TSS
 errorentry segment_not_present do_segment_not_present
@@ -1548,7 +1575,11 @@ error_sti:
  */
 error_kernelspace:
 	incl %ebx
+<<<<<<< HEAD
 	leaq native_irq_return_iret(%rip),%rcx
+=======
+	leaq irq_return(%rip),%rcx
+>>>>>>> 5878f5dae586fb8ec6f5d5d75ed7e5812b7f9eff
 	cmpq %rcx,RIP+8(%rsp)
 	je error_swapgs
 	movl %ecx,%eax	/* zero extend */

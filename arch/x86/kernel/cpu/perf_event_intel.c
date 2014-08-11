@@ -1070,6 +1070,7 @@ again:
 	intel_pmu_lbr_read();
 
 	/*
+<<<<<<< HEAD
 	 * CondChgd bit 63 doesn't mean any overflow status. Ignore
 	 * and clear the bit.
 	 */
@@ -1079,6 +1080,8 @@ again:
 	}
 
 	/*
+=======
+>>>>>>> 5878f5dae586fb8ec6f5d5d75ed7e5812b7f9eff
 	 * PEBS overflow sets bit 62 in the global status register
 	 */
 	if (__test_and_clear_bit(62, (unsigned long *)&status)) {

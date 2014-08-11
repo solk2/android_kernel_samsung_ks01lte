@@ -41,6 +41,10 @@ enum {
 #ifdef CONFIG_X86_64
 #define vdso_enabled			sysctl_vsyscall32
 #define arch_setup_additional_pages	syscall32_setup_pages
+<<<<<<< HEAD
+=======
+extern int sysctl_ldt16;
+>>>>>>> 5878f5dae586fb8ec6f5d5d75ed7e5812b7f9eff
 #endif
 
 /*
@@ -380,6 +384,16 @@ static ctl_table abi_table2[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec
 	},
+<<<<<<< HEAD
+=======
+	{
+		.procname	= "ldt16",
+		.data		= &sysctl_ldt16,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec
+	},
+>>>>>>> 5878f5dae586fb8ec6f5d5d75ed7e5812b7f9eff
 	{}
 };
 

@@ -61,8 +61,11 @@ static inline void x86_ce4100_early_setup(void) { }
 
 #ifndef _SETUP
 
+<<<<<<< HEAD
 #include <asm/espfix.h>
 
+=======
+>>>>>>> 5878f5dae586fb8ec6f5d5d75ed7e5812b7f9eff
 /*
  * This is set up by the setup-routine at boot-time
  */

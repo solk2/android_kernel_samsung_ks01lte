@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  */
-#ifdef CONFIG_SEC_H_PROJECT
+#ifdef CONFIG_SEC_KS01_PROJECT
 #include <mach/camera2_h.h>
 #else
 

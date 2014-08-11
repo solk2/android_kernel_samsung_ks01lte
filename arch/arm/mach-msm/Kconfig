@@ -1607,6 +1607,13 @@ config MACH_KS01LGT
 	help
 	  Support for Samsung KS01LTELGT device.
 
+config MACH_KS01EUR
+	default n
+	bool "Samsung model KS01LTEEUR"
+	select SEC_KS01_PROJECT
+	help
+	  Support for Samsung KS01LTEEUR device.
+
 config SEC_V2_PROJECT
 	default n
 	bool "Samsung V2 project"
