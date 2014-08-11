@@ -1,4 +1,4 @@
-#ifdef CONFIG_SEC_H_PROJECT
+#ifdef CONFIG_SEC_KS01_PROJECT
 #include <media/msm_cam_sensor_h.h>
 #else
 
