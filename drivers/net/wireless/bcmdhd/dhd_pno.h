@@ -1,7 +1,7 @@
 /*
  * Header file of Broadcom Dongle Host Driver (DHD)
  * Prefered Network Offload code and Wi-Fi Location Service(WLS) code.
- * Copyright (C) 1999-2013, Broadcom Corporation
+ * Copyright (C) 1999-2014, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,12 +21,13 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_pno.h 423669 2013-09-12 23:01:55Z $
+ * $Id: dhd_pno.h 423669 2013-09-18 13:01:55Z $
  */
 
 #ifndef __DHD_PNO_H__
 #define __DHD_PNO_H__
 
+#if defined(PNO_SUPPORT)
 #define PNO_TLV_PREFIX			'S'
 #define PNO_TLV_VERSION			'1'
 #define PNO_TLV_SUBTYPE_LEGACY_PNO '2'
@@ -96,7 +97,7 @@ typedef struct cmd_tlv {
 } cmd_tlv_t;
 typedef enum dhd_pno_mode {
 	/* Wi-Fi Legacy PNO Mode */
-	DHD_PNO_NONE_MODE 	= 0,
+	DHD_PNO_NONE_MODE = 0,
 	DHD_PNO_LEGACY_MODE = (1 << (0)),
 	/* Wi-Fi Android BATCH SCAN Mode */
 	DHD_PNO_BATCH_MODE = (1 << (1)),
@@ -104,6 +105,7 @@ typedef enum dhd_pno_mode {
 	DHD_PNO_HOTLIST_MODE = (1 << (2))
 } dhd_pno_mode_t;
 struct dhd_pno_ssid {
+	bool		hidden;
 	uint32		SSID_len;
 	uchar		SSID[DOT11_MAX_SSID_LEN];
 	struct list_head list;
@@ -209,7 +211,7 @@ extern int
 dhd_dev_pno_stop_for_ssid(struct net_device *dev);
 
 extern int
-dhd_dev_pno_set_for_ssid(struct net_device *dev, wlc_ssid_t* ssids_local, int nssid,
+dhd_dev_pno_set_for_ssid(struct net_device *dev, wlc_ssid_ext_t* ssids_local, int nssid,
 	uint16 scan_fr, int pno_repeat, int pno_freq_expo_max, uint16 *channel_list, int nchan);
 
 extern int
@@ -229,7 +231,7 @@ dhd_dev_pno_set_for_hotlist(struct net_device *dev, wl_pfn_bssid_t *p_pfn_bssid,
 /* dhd pno fuctions */
 extern int dhd_pno_stop_for_ssid(dhd_pub_t *dhd);
 extern int dhd_pno_enable(dhd_pub_t *dhd, int enable);
-extern int dhd_pno_set_for_ssid(dhd_pub_t *dhd, wlc_ssid_t* ssid_list, int nssid,
+extern int dhd_pno_set_for_ssid(dhd_pub_t *dhd, wlc_ssid_ext_t* ssid_list, int nssid,
 	uint16  scan_fr, int pno_repeat, int pno_freq_expo_max, uint16 *channel_list, int nchan);
 
 extern int dhd_pno_set_for_batch(dhd_pub_t *dhd, struct dhd_pno_batch_params *batch_params);
@@ -247,4 +249,6 @@ extern int dhd_pno_stop_for_hotlist(dhd_pub_t *dhd);
 extern int dhd_pno_event_handler(dhd_pub_t *dhd, wl_event_msg_t *event, void *event_data);
 extern int dhd_pno_init(dhd_pub_t *dhd);
 extern int dhd_pno_deinit(dhd_pub_t *dhd);
+#endif 
+
 #endif /* __DHD_PNO_H__ */
